@@ -1,7 +1,20 @@
 import React, { useState } from 'react';
 import { ProjectConfig, ProjectTag } from '../types';
 import { SupabaseManager } from '../lib/supabaseClient';
-import { X, Plus, Check, Trash2, Key, Globe, Shield, RefreshCw, Zap } from 'lucide-react';
+import {
+  X,
+  Plus,
+  Check,
+  Trash2,
+  Key,
+  Globe,
+  Shield,
+  RefreshCw,
+  Zap,
+  Sparkles,
+  ExternalLink,
+  Layers,
+} from 'lucide-react';
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -23,6 +36,14 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   onDeleteProject,
 }) => {
   const [isAdding, setIsAdding] = useState(false);
+  const [connectMode, setConnectMode] = useState<'token' | 'manual'>('token');
+
+  // Token Import Mode state
+  const [supabaseToken, setSupabaseToken] = useState('');
+  const [importingToken, setImportingToken] = useState(false);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+
+  // Manual Mode state
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [anonKey, setAnonKey] = useState('');
@@ -32,6 +53,25 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   if (!isOpen) return null;
+
+  const handleImportFromToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supabaseToken.trim()) return;
+    setImportingToken(true);
+    setTokenError(null);
+
+    try {
+      const imported = await SupabaseManager.importProjectsFromToken(supabaseToken);
+      imported.forEach(p => onAddProject(p));
+      setIsAdding(false);
+      setSupabaseToken('');
+      alert(`🎉 Successfully imported ${imported.length} project(s) from your Supabase account!`);
+    } catch (err: any) {
+      setTokenError(err.message || 'Failed to import projects from token.');
+    } finally {
+      setImportingToken(false);
+    }
+  };
 
   const handleTestConnection = async () => {
     if (!url || !anonKey) {
@@ -56,7 +96,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     setTestResult(res);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !url || !anonKey) return;
 
@@ -90,7 +130,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               <Globe className="w-4 h-4 text-supa-green" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-white">Supabase Projects</h2>
+              <h2 className="text-sm font-semibold text-white">Supabase Workspaces</h2>
               <p className="text-[11px] text-carbon-400">Manage connections & environments</p>
             </div>
           </div>
@@ -105,17 +145,17 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         {/* Content Body */}
         <div className="p-5 overflow-y-auto space-y-4">
           
-          {/* Project List */}
+          {/* Project List View */}
           {!isAdding && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-carbon-300">Connected Workspaces</span>
+                <span className="text-xs font-medium text-carbon-300">Connected Projects</span>
                 <button
                   onClick={() => setIsAdding(true)}
                   className="flex items-center gap-1.5 text-xs text-supa-green font-medium hover:underline"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Connect New
+                  Connect Project
                 </button>
               </div>
 
@@ -187,140 +227,229 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               <div className="p-3 rounded-xl bg-carbon-900/80 border border-carbon-800 flex items-start gap-2.5 text-[11px] text-carbon-300">
                 <Shield className="w-4 h-4 text-supa-green shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold text-white">Zero Telemetry & Local Storage:</span>
+                  <span className="font-semibold text-white">Local Sandbox Isolation:</span>
                   <p className="text-carbon-400 mt-0.5 leading-relaxed">
-                    API keys and endpoints never touch any intermediate server. All database queries connect directly from your device to Supabase REST APIs.
+                    Credentials never leave your mobile device. Requests travel directly between your phone and Supabase REST endpoints.
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Add Project Form */}
+          {/* Add / Connect Project View */}
           {isAdding && (
-            <form onSubmit={handleSubmit} className="space-y-3.5">
+            <div className="space-y-4">
               <div className="flex items-center justify-between pb-1">
-                <span className="text-xs font-semibold text-white">New Supabase Connection</span>
+                <span className="text-xs font-semibold text-white">Connect Supabase</span>
                 <button
                   type="button"
-                  onClick={() => setIsAdding(false)}
+                  onClick={() => {
+                    setIsAdding(false);
+                    setTokenError(null);
+                    setTestResult(null);
+                  }}
                   className="text-xs text-carbon-400 hover:text-white"
                 >
-                  Cancel
+                  Back to List
                 </button>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-carbon-300 mb-1">
-                  Project Name / Label
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. My SaaS Production"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-carbon-900 border border-carbon-750 text-white placeholder-carbon-500 focus:outline-none focus:border-supa-green focus:ring-1 focus:ring-supa-green"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-carbon-300 mb-1">
-                  Supabase Project URL
-                </label>
-                <input
-                  type="url"
-                  required
-                  placeholder="https://xyzproject.supabase.co"
-                  value={url}
-                  onChange={e => setUrl(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-carbon-900 border border-carbon-750 text-white placeholder-carbon-500 focus:outline-none focus:border-supa-green focus:ring-1 focus:ring-supa-green"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-carbon-300 mb-1">
-                  Anon / Public Key
-                </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
-                  value={anonKey}
-                  onChange={e => setAnonKey(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-carbon-900 border border-carbon-750 text-white placeholder-carbon-500 focus:outline-none focus:border-supa-green focus:ring-1 focus:ring-supa-green"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-[11px] font-medium text-carbon-300 flex items-center gap-1">
-                    <Key className="w-3 h-3 text-amber-400" />
-                    Service Role Key <span className="text-[10px] text-carbon-500">(Optional)</span>
-                  </label>
-                  <span className="text-[10px] text-carbon-400">Required for Auth users management</span>
-                </div>
-                <input
-                  type="password"
-                  placeholder="Service role key for administrative privileges"
-                  value={serviceRoleKey}
-                  onChange={e => setServiceRoleKey(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-carbon-900 border border-carbon-750 text-white placeholder-carbon-500 focus:outline-none focus:border-supa-green focus:ring-1 focus:ring-supa-green"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-carbon-300 mb-1">Environment Tag</label>
-                <div className="flex gap-2">
-                  {(['prod', 'staging', 'dev'] as ProjectTag[]).map(t => (
-                    <button
-                      type="button"
-                      key={t}
-                      onClick={() => setTag(t)}
-                      className={`flex-1 py-1.5 text-xs rounded-lg uppercase font-mono font-semibold transition-all ${
-                        tag === t
-                          ? 'bg-supa-green/20 text-supa-green border border-supa-green/40'
-                          : 'bg-carbon-900 text-carbon-400 border border-carbon-800'
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {testResult && (
-                <div
-                  className={`p-2.5 rounded-xl text-xs flex items-center gap-2 ${
-                    testResult.success
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-red-500/10 text-red-400 border border-red-500/30'
-                  }`}
-                >
-                  <Zap className="w-3.5 h-3.5 shrink-0" />
-                  <span>{testResult.message}</span>
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-2">
+              {/* Mode Tabs */}
+              <div className="flex rounded-xl bg-carbon-900 p-1 border border-carbon-800 text-xs">
                 <button
                   type="button"
-                  onClick={handleTestConnection}
-                  disabled={testing}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-carbon-800 hover:bg-carbon-750 text-white text-xs font-medium border border-carbon-700 transition-colors"
+                  onClick={() => setConnectMode('token')}
+                  className={`flex-1 py-1.5 rounded-lg font-medium transition-all flex items-center justify-center gap-1.5 ${
+                    connectMode === 'token'
+                      ? 'bg-carbon-800 text-supa-green font-semibold shadow-sm'
+                      : 'text-carbon-400 hover:text-white'
+                  }`}
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`} />
-                  Test Connection
+                  <Sparkles className="w-3.5 h-3.5 text-supa-green" />
+                  <span>1-Click Token Import</span>
                 </button>
-
                 <button
-                  type="submit"
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-supa-green hover:bg-supa-light text-black text-xs font-bold transition-all shadow-glow"
+                  type="button"
+                  onClick={() => setConnectMode('manual')}
+                  className={`flex-1 py-1.5 rounded-lg font-medium transition-all flex items-center justify-center gap-1.5 ${
+                    connectMode === 'manual'
+                      ? 'bg-carbon-800 text-supa-green font-semibold shadow-sm'
+                      : 'text-carbon-400 hover:text-white'
+                  }`}
                 >
-                  Save & Connect
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Manual URL & Keys</span>
                 </button>
               </div>
-            </form>
+
+              {/* Mode 1: 1-Click Access Token Import */}
+              {connectMode === 'token' && (
+                <form onSubmit={handleImportFromToken} className="space-y-3.5">
+                  <div className="p-3 rounded-xl bg-carbon-900/60 border border-carbon-800 text-xs text-carbon-300 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-white flex items-center gap-1">
+                        <Key className="w-3.5 h-3.5 text-supa-green" />
+                        Supabase Personal Access Token
+                      </span>
+                      <a
+                        href="https://supabase.com/dashboard/account/tokens"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] text-supa-green hover:underline flex items-center gap-0.5"
+                      >
+                        Generate Token <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    </div>
+                    <p className="text-[11px] text-carbon-400 leading-relaxed">
+                      Enter your Supabase Access Token (`sbp_...`). SupaCompanion will automatically discover and import <strong>all your projects, database URLs, and API keys</strong> in one tap!
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-carbon-300 mb-1">
+                      Personal Access Token (sbp_...)
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="sbp_0123456789abcdef..."
+                      value={supabaseToken}
+                      onChange={e => setSupabaseToken(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-carbon-900 border border-carbon-750 text-white placeholder-carbon-600 focus:outline-none focus:border-supa-green"
+                    />
+                  </div>
+
+                  {tokenError && (
+                    <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-400">
+                      {tokenError}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={importingToken || !supabaseToken.trim()}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-supa-green hover:bg-supa-light text-black text-xs font-bold transition-all shadow-glow disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${importingToken ? 'animate-spin' : ''}`} />
+                    <span>{importingToken ? 'Importing Projects...' : 'Import All Projects ⚡'}</span>
+                  </button>
+                </form>
+              )}
+
+              {/* Mode 2: Manual Credentials */}
+              {connectMode === 'manual' && (
+                <form onSubmit={handleManualSubmit} className="space-y-3.5">
+                  <div>
+                    <label className="block text-[11px] font-medium text-carbon-300 mb-1">
+                      Project Name / Label
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. My Production Database"
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-carbon-900 border border-carbon-750 text-white placeholder-carbon-500 focus:outline-none focus:border-supa-green"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-carbon-300 mb-1">
+                      Project URL
+                    </label>
+                    <input
+                      type="url"
+                      required
+                      placeholder="https://xyzproject.supabase.co"
+                      value={url}
+                      onChange={e => setUrl(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-carbon-900 border border-carbon-750 text-white placeholder-carbon-500 focus:outline-none focus:border-supa-green"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-carbon-300 mb-1">
+                      Anon / Public Key
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+                      value={anonKey}
+                      onChange={e => setAnonKey(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-carbon-900 border border-carbon-750 text-white placeholder-carbon-500 focus:outline-none focus:border-supa-green"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-carbon-300 flex items-center justify-between mb-1">
+                      <span>Service Role Key (Optional)</span>
+                      <span className="text-[10px] text-carbon-500">For Auth management</span>
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="Service role key for user admin"
+                      value={serviceRoleKey}
+                      onChange={e => setServiceRoleKey(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-carbon-900 border border-carbon-750 text-white placeholder-carbon-500 focus:outline-none focus:border-supa-green"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-carbon-300 mb-1">Environment Tag</label>
+                    <div className="flex gap-2">
+                      {(['prod', 'staging', 'dev'] as ProjectTag[]).map(t => (
+                        <button
+                          type="button"
+                          key={t}
+                          onClick={() => setTag(t)}
+                          className={`flex-1 py-1.5 text-xs rounded-lg uppercase font-mono font-semibold transition-all ${
+                            tag === t
+                              ? 'bg-supa-green/20 text-supa-green border border-supa-green/40'
+                              : 'bg-carbon-900 text-carbon-400 border border-carbon-800'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {testResult && (
+                    <div
+                      className={`p-2.5 rounded-xl text-xs flex items-center gap-2 ${
+                        testResult.success
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-red-500/10 text-red-400 border border-red-500/30'
+                      }`}
+                    >
+                      <Zap className="w-3.5 h-3.5 shrink-0" />
+                      <span>{testResult.message}</span>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleTestConnection}
+                      disabled={testing}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-carbon-800 hover:bg-carbon-750 text-white text-xs font-medium border border-carbon-700 transition-colors"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`} />
+                      Test Connection
+                    </button>
+
+                    <button
+                      type="submit"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-supa-green hover:bg-supa-light text-black text-xs font-bold transition-all shadow-glow"
+                    >
+                      Save Project
+                    </button>
+                  </div>
+                </form>
+              )}
+
+            </div>
           )}
 
         </div>

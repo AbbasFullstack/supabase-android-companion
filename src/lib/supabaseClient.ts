@@ -438,6 +438,65 @@ export class SupabaseManager {
     const { data } = client.storage.from(bucketId).getPublicUrl(filePath);
     return data.publicUrl;
   }
+
+  static async importProjectsFromToken(accessToken: string): Promise<ProjectConfig[]> {
+    const cleanToken = accessToken.trim();
+    if (!cleanToken) throw new Error('Please enter a valid Supabase Personal Access Token.');
+
+    const res = await fetch('https://api.supabase.com/v1/projects', {
+      headers: {
+        Authorization: `Bearer ${cleanToken}`,
+      },
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        throw new Error('Unauthorized: Invalid Supabase Access Token.');
+      }
+      throw new Error(`Supabase Management API error: HTTP ${res.status}`);
+    }
+
+    const projectsData = await res.json();
+    if (!Array.isArray(projectsData) || projectsData.length === 0) {
+      throw new Error('No projects found in this Supabase account.');
+    }
+
+    const importedProjects: ProjectConfig[] = [];
+
+    for (const p of projectsData) {
+      let anonKey = '';
+      let serviceRoleKey = '';
+
+      try {
+        const keysRes = await fetch(`https://api.supabase.com/v1/projects/${p.id}/api-keys`, {
+          headers: {
+            Authorization: `Bearer ${cleanToken}`,
+          },
+        });
+        if (keysRes.ok) {
+          const keys = await keysRes.json();
+          const anon = keys.find((k: any) => k.name === 'anon');
+          const service = keys.find((k: any) => k.name === 'service_role');
+          if (anon) anonKey = anon.api_key;
+          if (service) serviceRoleKey = service.api_key;
+        }
+      } catch (e) {
+        console.warn(`Could not auto-fetch API keys for ${p.name}`, e);
+      }
+
+      importedProjects.push({
+        id: p.id,
+        name: p.name || p.id,
+        url: `https://${p.id}.supabase.co`,
+        anonKey: anonKey || 'placeholder_anon_key',
+        serviceRoleKey: serviceRoleKey || undefined,
+        tag: p.status === 'ACTIVE_HEALTHY' ? 'prod' : 'dev',
+        createdAt: Date.now(),
+      });
+    }
+
+    return importedProjects;
+  }
 }
 
 export function exportToCsv(filename: string, rows: Record<string, any>[]): void {
