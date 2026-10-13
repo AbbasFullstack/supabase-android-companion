@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Build Android APK](https://github.com/placeholder/supa-companion/actions/workflows/build-apk.yml/badge.svg)](https://github.com/placeholder/supa-companion/actions)
+[![Build Android APK](https://github.com/AbbasFullstack/supabase-android-companion/actions/workflows/build-apk.yml/badge.svg)](https://github.com/AbbasFullstack/supabase-android-companion/actions)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
@@ -103,8 +103,8 @@ cd android && ./gradlew assembleDebug
 ### Installation:
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/supa-companion.git
-cd supa-companion
+git clone https://github.com/AbbasFullstack/supabase-android-companion.git
+cd supabase-android-companion
 
 # Install dependencies
 npm install
