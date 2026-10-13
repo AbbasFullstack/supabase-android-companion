@@ -1,0 +1,8 @@
+{
+  "appId": "com.supacompanion.app",
+  "appName": "SupaCompanion",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
