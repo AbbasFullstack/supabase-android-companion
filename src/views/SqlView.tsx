@@ -20,14 +20,14 @@ interface SqlViewProps {
 }
 
 const PRESET_QUERIES = [
-  { label: 'All Users', query: 'SELECT * FROM users_profiles LIMIT 10;' },
-  { label: 'Order Status Count', query: 'SELECT count(*), status FROM orders GROUP BY status;' },
-  { label: 'Recent Audits', query: 'SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 15;' },
-  { label: 'Active API Keys', query: 'SELECT * FROM api_keys WHERE is_active = true;' },
+  { label: 'List Public Tables', query: "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;" },
+  { label: 'Server Version', query: 'SHOW server_version;' },
+  { label: 'Current Timestamp', query: 'SELECT now() AS current_time;' },
+  { label: 'Database Size', query: 'SELECT pg_size_pretty(pg_database_size(current_database())) AS database_size;' },
 ];
 
 export const SqlView: React.FC<SqlViewProps> = ({ project }) => {
-  const [query, setQuery] = useState<string>('SELECT * FROM users_profiles LIMIT 10;');
+  const [query, setQuery] = useState<string>("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';");
   const [running, setRunning] = useState<boolean>(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [activeTab, setActiveTab] = useState<'table' | 'json'>('table');

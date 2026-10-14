@@ -121,6 +121,17 @@ export const StorageView: React.FC<StorageViewProps> = ({ project }) => {
         )}
       </div>
 
+      {/* Empty State if No Buckets */}
+      {!loadingBuckets && buckets.length === 0 && (
+        <div className="carbon-card rounded-2xl p-8 sm:p-12 border border-carbon-800 text-center space-y-3">
+          <HardDrive className="w-12 h-12 mx-auto text-carbon-500 opacity-40" />
+          <h3 className="text-sm font-semibold text-white">No Storage Buckets Found</h3>
+          <p className="text-xs text-carbon-400 max-w-sm mx-auto leading-relaxed">
+            This Supabase project does not have any storage buckets yet. Create a public or private bucket in your Supabase Storage dashboard.
+          </p>
+        </div>
+      )}
+
       {/* Bucket Details & Files List */}
       {selectedBucket && (
         <div className="carbon-card rounded-2xl p-4 sm:p-5 border border-carbon-800 space-y-4 shadow-2xl">

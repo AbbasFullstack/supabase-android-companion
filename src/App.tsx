@@ -4,6 +4,7 @@ import { SupabaseManager } from './lib/supabaseClient';
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
 import { ProjectModal } from './components/ProjectModal';
+import { ConnectGateway } from './components/ConnectGateway';
 import { TablesView } from './views/TablesView';
 import { SqlView } from './views/SqlView';
 import { AuthView } from './views/AuthView';
@@ -15,14 +16,18 @@ export function App() {
   const [activeProjectId, setActiveProjectId] = useState<string>(() => SupabaseManager.getActiveProjectId());
   const [activeTab, setActiveTab] = useState<ActiveTab>('tables');
   const [isProjectsModalOpen, setIsProjectsModalOpen] = useState<boolean>(false);
-  const [latency, setLatency] = useState<number | null>(32);
-  const [isConnected, setIsConnected] = useState<boolean>(true);
+  const [latency, setLatency] = useState<number | null>(null);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
 
-  const activeProject = projects.find(p => p.id === activeProjectId) || projects[0];
+  const activeProject = projects.find(p => p.id === activeProjectId) || (projects.length > 0 ? projects[0] : null);
 
   // Ping project when active project changes
   const checkLatency = async () => {
-    if (!activeProject) return;
+    if (!activeProject) {
+      setLatency(null);
+      setIsConnected(false);
+      return;
+    }
     try {
       const res = await SupabaseManager.testConnection(activeProject);
       setLatency(res.latencyMs);
@@ -33,29 +38,46 @@ export function App() {
   };
 
   useEffect(() => {
-    checkLatency();
-  }, [activeProjectId]);
+    if (activeProject) {
+      checkLatency();
+    }
+  }, [activeProject?.id]);
 
   const handleSelectProject = (id: string) => {
     setActiveProjectId(id);
     SupabaseManager.setActiveProjectId(id);
   };
 
-  const handleAddProject = (newProject: ProjectConfig) => {
-    const updated = [newProject, ...projects];
+  const handleAddProjects = (newProjects: ProjectConfig[]) => {
+    if (newProjects.length === 0) return;
+    const existingIds = new Set(projects.map(p => p.id));
+    const toAdd = newProjects.filter(p => !existingIds.has(p.id));
+    const updated = [...toAdd, ...projects];
     setProjects(updated);
     SupabaseManager.saveProjects(updated);
-    handleSelectProject(newProject.id);
+    handleSelectProject(newProjects[0].id);
+  };
+
+  const handleAddSingleProject = (newProject: ProjectConfig) => {
+    handleAddProjects([newProject]);
   };
 
   const handleDeleteProject = (id: string) => {
     const updated = projects.filter(p => p.id !== id);
     setProjects(updated);
     SupabaseManager.saveProjects(updated);
-    if (activeProjectId === id) {
+    if (updated.length > 0) {
       handleSelectProject(updated[0].id);
+    } else {
+      setActiveProjectId('');
+      SupabaseManager.setActiveProjectId('');
     }
   };
+
+  // If no projects connected yet, show the Login / Connect Gateway
+  if (projects.length === 0 || !activeProject) {
+    return <ConnectGateway onAddProjects={handleAddProjects} />;
+  }
 
   return (
     <div className="min-h-screen bg-carbon-950 text-carbon-100 flex flex-col bg-grid-pattern selection:bg-supa-green selection:text-black">
@@ -90,9 +112,9 @@ export function App() {
         isOpen={isProjectsModalOpen}
         onClose={() => setIsProjectsModalOpen(false)}
         projects={projects}
-        activeProjectId={activeProjectId}
+        activeProjectId={activeProject.id}
         onSelectProject={handleSelectProject}
-        onAddProject={handleAddProject}
+        onAddProject={handleAddSingleProject}
         onDeleteProject={handleDeleteProject}
       />
     </div>

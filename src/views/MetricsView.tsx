@@ -27,20 +27,18 @@ export const MetricsView: React.FC<MetricsViewProps> = ({
   onRefreshLatency,
 }) => {
   const [testing, setTesting] = useState<boolean>(false);
-  const [pingHistory, setPingHistory] = useState<number[]>([
-    currentLatency || 32,
-    35,
-    30,
-    34,
-    currentLatency || 32,
-  ]);
+  const [pingHistory, setPingHistory] = useState<number[]>(() =>
+    currentLatency !== null ? [currentLatency] : []
+  );
 
   const handleRunPing = async () => {
     setTesting(true);
     const res = await SupabaseManager.testConnection(project);
     setTesting(false);
     onRefreshLatency();
-    setPingHistory(prev => [...prev.slice(1), res.latencyMs]);
+    if (res.success) {
+      setPingHistory(prev => [...prev.slice(-4), res.latencyMs]);
+    }
   };
 
   return (
@@ -75,26 +73,30 @@ export const MetricsView: React.FC<MetricsViewProps> = ({
             <span className="text-[10px] text-carbon-400 uppercase font-mono tracking-wider">Current Latency</span>
             <div className="flex items-baseline gap-2 mt-0.5">
               <span className="text-3xl font-mono font-bold text-white tracking-tight">
-                {currentLatency ?? 32}
+                {currentLatency !== null ? currentLatency : '--'}
               </span>
               <span className="text-xs font-mono text-supa-green font-semibold">ms</span>
             </div>
           </div>
 
-          {/* Simple Sparkline Bars */}
+          {/* Sparkline Bars */}
           <div className="flex items-end gap-1.5 h-10">
-            {pingHistory.map((val, idx) => {
-              const heightPct = Math.min(100, Math.max(20, (val / 120) * 100));
-              return (
-                <div key={idx} className="flex flex-col items-center gap-1">
-                  <div
-                    style={{ height: `${heightPct}%` }}
-                    className="w-2.5 bg-supa-green rounded-t-sm opacity-80 hover:opacity-100 transition-all"
-                  />
-                  <span className="text-[8px] font-mono text-carbon-500">{val}m</span>
-                </div>
-              );
-            })}
+            {pingHistory.length === 0 ? (
+              <span className="text-[10px] font-mono text-carbon-500 self-center">No latency benchmarks yet</span>
+            ) : (
+              pingHistory.map((val, idx) => {
+                const heightPct = Math.min(100, Math.max(20, (val / 120) * 100));
+                return (
+                  <div key={idx} className="flex flex-col items-center gap-1">
+                    <div
+                      style={{ height: `${heightPct}%` }}
+                      className="w-2.5 bg-supa-green rounded-t-sm opacity-80 hover:opacity-100 transition-all"
+                    />
+                    <span className="text-[8px] font-mono text-carbon-500">{val}m</span>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>

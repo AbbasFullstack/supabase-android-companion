@@ -188,8 +188,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                               className={`text-[9px] px-1.5 py-0.2 rounded font-mono uppercase ${
                                 p.tag === 'prod'
                                   ? 'bg-red-500/10 text-red-400'
-                                  : p.tag === 'demo'
-                                  ? 'bg-supa-green/15 text-supa-green font-bold'
+                                  : p.tag === 'staging'
+                                  ? 'bg-amber-500/10 text-amber-400'
                                   : 'bg-blue-500/10 text-blue-400'
                               }`}
                             >
@@ -208,15 +208,13 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                             <Check className="w-3 h-3" /> Active
                           </span>
                         )}
-                        {!p.isDemo && (
-                          <button
-                            onClick={() => onDeleteProject(p.id)}
-                            className="p-1.5 rounded-lg text-carbon-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                            title="Delete project"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => onDeleteProject(p.id)}
+                          className="p-1.5 rounded-lg text-carbon-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="Delete project"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   );

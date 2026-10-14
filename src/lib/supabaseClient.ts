@@ -1,6 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { ProjectConfig, TableInfo, QueryResult, AuthUser, StorageBucket, StorageFile } from '../types';
-import { DEMO_PROJECT, DEMO_TABLES, DEMO_ROWS, DEMO_AUTH_USERS, DEMO_STORAGE_BUCKETS, DEMO_FILES } from './demoData';
 
 const STORAGE_KEY = 'supa_companion_projects';
 const ACTIVE_PROJECT_KEY = 'supa_companion_active_id';
@@ -11,29 +10,29 @@ export class SupabaseManager {
   static getStoredProjects(): ProjectConfig[] {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
-      if (!data) {
-        return [DEMO_PROJECT];
-      }
+      if (!data) return [];
       const parsed = JSON.parse(data) as ProjectConfig[];
-      if (!parsed.some(p => p.id === DEMO_PROJECT.id)) {
-        parsed.unshift(DEMO_PROJECT);
-      }
-      return parsed;
+      // Filter out any legacy demo projects
+      const realProjects = parsed.filter(p => !p.isDemo && p.id !== 'demo-project-carbon');
+      return realProjects;
     } catch {
-      return [DEMO_PROJECT];
+      return [];
     }
   }
 
   static saveProjects(projects: ProjectConfig[]): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+      const realProjects = projects.filter(p => !p.isDemo && p.id !== 'demo-project-carbon');
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(realProjects));
     } catch (e) {
       console.error('Failed to save projects to localStorage', e);
     }
   }
 
   static getActiveProjectId(): string {
-    return localStorage.getItem(ACTIVE_PROJECT_KEY) || DEMO_PROJECT.id;
+    const id = localStorage.getItem(ACTIVE_PROJECT_KEY);
+    if (id === 'demo-project-carbon') return '';
+    return id || '';
   }
 
   static setActiveProjectId(id: string): void {
@@ -41,7 +40,7 @@ export class SupabaseManager {
   }
 
   static getClient(project: ProjectConfig): SupabaseClient | null {
-    if (project.isDemo) return null;
+    if (!project || !project.url || (!project.anonKey && !project.serviceRoleKey)) return null;
     const key = project.serviceRoleKey || project.anonKey;
     const cacheKey = `${project.url}_${key}`;
 
@@ -64,15 +63,6 @@ export class SupabaseManager {
 
   static async testConnection(project: ProjectConfig): Promise<{ success: boolean; latencyMs: number; message: string }> {
     const start = performance.now();
-    if (project.isDemo) {
-      await new Promise(r => setTimeout(r, 120));
-      return {
-        success: true,
-        latencyMs: 38,
-        message: 'Connected to Acme Cloud Demo (Simulated ⚡)',
-      };
-    }
-
     try {
       const cleanUrl = project.url.replace(/\/+$/, '');
       const testEndpoint = `${cleanUrl}/rest/v1/`;
@@ -93,7 +83,7 @@ export class SupabaseManager {
         return {
           success: false,
           latencyMs,
-          message: `HTTP ${res.status}: ${res.statusText || 'Authentication failed'}`,
+          message: `HTTP ${res.status}: ${res.statusText || 'Authentication failed. Check your API key.'}`,
         };
       }
     } catch (err: any) {
@@ -101,16 +91,12 @@ export class SupabaseManager {
       return {
         success: false,
         latencyMs,
-        message: err.message || 'Network connection error',
+        message: err.message || 'Network connection failed. Verify project URL.',
       };
     }
   }
 
   static async fetchTables(project: ProjectConfig): Promise<TableInfo[]> {
-    if (project.isDemo) {
-      return DEMO_TABLES;
-    }
-
     try {
       const cleanUrl = project.url.replace(/\/+$/, '');
       const key = project.serviceRoleKey || project.anonKey;
@@ -121,9 +107,11 @@ export class SupabaseManager {
         },
       });
 
-      if (!res.ok) throw new Error('Failed to fetch OpenAPI definition');
-      const swagger = await res.json();
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: Failed to introspect database schema.`);
+      }
 
+      const swagger = await res.json();
       const tables: TableInfo[] = [];
       const definitions = swagger.definitions || {};
 
@@ -146,10 +134,10 @@ export class SupabaseManager {
         });
       }
 
-      return tables.length > 0 ? tables : DEMO_TABLES;
-    } catch (e) {
-      console.warn('Could not auto-introspect OpenAPI tables, falling back to basic list', e);
-      return DEMO_TABLES;
+      return tables;
+    } catch (e: any) {
+      console.warn('Could not auto-introspect OpenAPI tables:', e);
+      return [];
     }
   }
 
@@ -169,27 +157,8 @@ export class SupabaseManager {
     const start = (page - 1) * pageSize;
     const end = start + pageSize - 1;
 
-    if (project.isDemo) {
-      let rows = [...(DEMO_ROWS[tableName] || [])];
-      if (options.search) {
-        const q = options.search.toLowerCase();
-        rows = rows.filter(r => JSON.stringify(r).toLowerCase().includes(q));
-      }
-      if (options.sortBy) {
-        const sortCol = options.sortBy;
-        const mult = options.sortAsc === false ? -1 : 1;
-        rows.sort((a, b) => {
-          if (a[sortCol] < b[sortCol]) return -1 * mult;
-          if (a[sortCol] > b[sortCol]) return 1 * mult;
-          return 0;
-        });
-      }
-      const totalCount = rows.length;
-      return { rows: rows.slice(start, end + 1), totalCount };
-    }
-
     const client = this.getClient(project);
-    if (!client) throw new Error('Client not initialized');
+    if (!client) throw new Error('Supabase client not initialized.');
 
     let query = client.from(tableName).select('*', { count: 'exact' });
 
@@ -202,19 +171,18 @@ export class SupabaseManager {
     const { data, count, error } = await query;
     if (error) throw error;
 
-    return { rows: data || [], totalCount: count || (data ? data.length : 0) };
+    let resultRows = data || [];
+    if (options.search && options.search.trim()) {
+      const q = options.search.toLowerCase().trim();
+      resultRows = resultRows.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+    }
+
+    return { rows: resultRows, totalCount: count || resultRows.length };
   }
 
   static async insertRow(project: ProjectConfig, tableName: string, rowData: Record<string, any>): Promise<any> {
-    if (project.isDemo) {
-      if (!DEMO_ROWS[tableName]) DEMO_ROWS[tableName] = [];
-      const newRow = { id: `demo_${Date.now()}`, ...rowData };
-      DEMO_ROWS[tableName].unshift(newRow);
-      return newRow;
-    }
-
     const client = this.getClient(project);
-    if (!client) throw new Error('Client not initialized');
+    if (!client) throw new Error('Supabase client not initialized.');
     const { data, error } = await client.from(tableName).insert(rowData).select().single();
     if (error) throw error;
     return data;
@@ -227,18 +195,8 @@ export class SupabaseManager {
     primaryKeyValue: any,
     updatedData: Record<string, any>
   ): Promise<any> {
-    if (project.isDemo) {
-      const rows = DEMO_ROWS[tableName] || [];
-      const idx = rows.findIndex(r => String(r[primaryKey]) === String(primaryKeyValue));
-      if (idx !== -1) {
-        DEMO_ROWS[tableName][idx] = { ...DEMO_ROWS[tableName][idx], ...updatedData };
-        return DEMO_ROWS[tableName][idx];
-      }
-      return updatedData;
-    }
-
     const client = this.getClient(project);
-    if (!client) throw new Error('Client not initialized');
+    if (!client) throw new Error('Supabase client not initialized.');
     const { data, error } = await client
       .from(tableName)
       .update(updatedData)
@@ -255,15 +213,8 @@ export class SupabaseManager {
     primaryKey: string,
     primaryKeyValue: any
   ): Promise<void> {
-    if (project.isDemo) {
-      if (DEMO_ROWS[tableName]) {
-        DEMO_ROWS[tableName] = DEMO_ROWS[tableName].filter(r => String(r[primaryKey]) !== String(primaryKeyValue));
-      }
-      return;
-    }
-
     const client = this.getClient(project);
-    if (!client) throw new Error('Client not initialized');
+    if (!client) throw new Error('Supabase client not initialized.');
     const { error } = await client.from(tableName).delete().eq(primaryKey, primaryKeyValue);
     if (error) throw error;
   }
@@ -271,57 +222,27 @@ export class SupabaseManager {
   static async executeSql(project: ProjectConfig, query: string): Promise<QueryResult> {
     const startTime = performance.now();
     const cleanSql = query.trim();
-
-    if (project.isDemo) {
-      await new Promise(r => setTimeout(r, 90));
-      const lower = cleanSql.toLowerCase();
-
-      // Check for simple demo queries
-      for (const tableName of Object.keys(DEMO_ROWS)) {
-        if (lower.includes(tableName)) {
-          const rows = DEMO_ROWS[tableName] || [];
-          const columns = rows.length > 0 ? Object.keys(rows[0]) : ['id'];
-          return {
-            columns,
-            rows,
-            rowCount: rows.length,
-            executionTimeMs: Math.round(performance.now() - startTime),
-            error: null,
-          };
-        }
-      }
-
-      // Default mock result
-      return {
-        columns: ['query_status', 'affected_rows', 'carbon_engine'],
-        rows: [{ query_status: 'SUCCESS', affected_rows: 1, carbon_engine: 'PostgreSQL 15.1 (SupaCompanion Simulated)' }],
-        rowCount: 1,
-        executionTimeMs: Math.round(performance.now() - startTime),
-        error: null,
-      };
-    }
-
     const client = this.getClient(project);
+
     if (!client) {
       return {
         columns: [],
         rows: [],
         rowCount: 0,
-        executionTimeMs: Math.round(performance.now() - startTime),
+        executionTimeMs: 0,
         error: 'Client not connected',
       };
     }
 
     try {
-      // In Supabase, direct raw SQL from client is typically executed via an RPC function
-      // e.g. supabase.rpc('exec_sql', { query: cleanSql })
+      // In Supabase, direct raw SQL from client is executed via an RPC function:
+      // CREATE OR REPLACE FUNCTION exec_sql(query text) RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS ...
       const { data, error } = await client.rpc('exec_sql', { query: cleanSql });
       const execTime = Math.round(performance.now() - startTime);
 
       if (error) {
-        // Provide clear hint for user
         const errorMsg = error.message.includes('function')
-          ? `${error.message}\n💡 Note: Supabase restricts direct SQL execution from client without a helper RPC or service role SQL endpoint. Use the Table Editor for direct PostgREST operations, or create an 'exec_sql(query text)' function in your Supabase SQL editor.`
+          ? `${error.message}\n\n💡 Supabase requires a helper function in your database to execute raw SQL from the client.\nTo enable this, run this once in your Supabase SQL Editor:\n\nCREATE OR REPLACE FUNCTION exec_sql(query text)\nRETURNS json LANGUAGE plpgsql SECURITY DEFINER\nAS $$\nDECLARE result json;\nBEGIN\n  EXECUTE 'WITH q AS (' || query || ') SELECT json_agg(q) FROM q' INTO result;\n  RETURN coalesce(result, '[]'::json);\nEND;\n$$;`
           : error.message;
 
         return {
@@ -333,8 +254,10 @@ export class SupabaseManager {
         };
       }
 
-      const rows = Array.isArray(data) ? data : [data];
-      const columns = rows.length > 0 && rows[0] && typeof rows[0] === 'object' ? Object.keys(rows[0]) : ['result'];
+      const rows = Array.isArray(data) ? data : data ? [data] : [];
+      const columns = rows.length > 0 && typeof rows[0] === 'object' && rows[0] !== null
+        ? Object.keys(rows[0])
+        : ['result'];
 
       return {
         columns,
@@ -355,15 +278,11 @@ export class SupabaseManager {
   }
 
   static async fetchAuthUsers(project: ProjectConfig): Promise<AuthUser[]> {
-    if (project.isDemo) {
-      return DEMO_AUTH_USERS;
-    }
-
     const client = this.getClient(project);
     if (!client) throw new Error('Client not initialized');
 
     if (!project.serviceRoleKey) {
-      throw new Error('Service Role Key is required to view and manage Supabase Auth users. (Anon key is read-restricted by Supabase for security).');
+      throw new Error('Service Role Key is required to view and manage Supabase Auth users. (Anon Key is read-restricted by Supabase for security). Please add your Service Role Key in Project Settings.');
     }
 
     try {
@@ -377,7 +296,7 @@ export class SupabaseManager {
         createdAt: u.created_at,
         lastSignInAt: u.last_sign_in_at,
         provider: u.app_metadata?.provider || 'email',
-        banned: (u as any).banned_until ? true : false,
+        isBanned: (u as any).banned_until ? true : false,
         userMetadata: u.user_metadata,
         appMetadata: u.app_metadata,
       }));
@@ -387,10 +306,6 @@ export class SupabaseManager {
   }
 
   static async fetchBuckets(project: ProjectConfig): Promise<StorageBucket[]> {
-    if (project.isDemo) {
-      return DEMO_STORAGE_BUCKETS;
-    }
-
     const client = this.getClient(project);
     if (!client) throw new Error('Client not initialized');
 
@@ -409,10 +324,6 @@ export class SupabaseManager {
   }
 
   static async fetchBucketFiles(project: ProjectConfig, bucketId: string): Promise<StorageFile[]> {
-    if (project.isDemo) {
-      return DEMO_FILES[bucketId] || [];
-    }
-
     const client = this.getClient(project);
     if (!client) throw new Error('Client not initialized');
 
@@ -430,13 +341,10 @@ export class SupabaseManager {
   }
 
   static getPublicUrl(project: ProjectConfig, bucketId: string, filePath: string): string {
-    if (project.isDemo) {
-      return `https://demo-supa.supabase.co/storage/v1/object/public/${bucketId}/${filePath}`;
-    }
     const client = this.getClient(project);
     if (!client) return '';
     const { data } = client.storage.from(bucketId).getPublicUrl(filePath);
-    return data.publicUrl;
+    return data?.publicUrl || '';
   }
 
   static async importProjectsFromToken(accessToken: string): Promise<ProjectConfig[]> {
@@ -451,14 +359,14 @@ export class SupabaseManager {
 
     if (!res.ok) {
       if (res.status === 401) {
-        throw new Error('Unauthorized: Invalid Supabase Access Token.');
+        throw new Error('Unauthorized: Invalid Supabase Personal Access Token.');
       }
       throw new Error(`Supabase Management API error: HTTP ${res.status}`);
     }
 
     const projectsData = await res.json();
     if (!Array.isArray(projectsData) || projectsData.length === 0) {
-      throw new Error('No projects found in this Supabase account.');
+      throw new Error('No Supabase projects found in this account.');
     }
 
     const importedProjects: ProjectConfig[] = [];
@@ -481,14 +389,14 @@ export class SupabaseManager {
           if (service) serviceRoleKey = service.api_key;
         }
       } catch (e) {
-        console.warn(`Could not auto-fetch API keys for ${p.name}`, e);
+        console.warn(`Could not auto-fetch API keys for project ${p.name}`, e);
       }
 
       importedProjects.push({
         id: p.id,
         name: p.name || p.id,
         url: `https://${p.id}.supabase.co`,
-        anonKey: anonKey || 'placeholder_anon_key',
+        anonKey: anonKey || '',
         serviceRoleKey: serviceRoleKey || undefined,
         tag: p.status === 'ACTIVE_HEALTHY' ? 'prod' : 'dev',
         createdAt: Date.now(),

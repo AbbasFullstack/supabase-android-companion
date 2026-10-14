@@ -1,4 +1,4 @@
-export type ProjectTag = 'prod' | 'staging' | 'dev' | 'demo';
+export type ProjectTag = 'prod' | 'staging' | 'dev';
 
 export interface ProjectConfig {
   id: string;

@@ -46,8 +46,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                       ? 'bg-red-500/10 text-red-400 border border-red-500/20'
                       : activeProject.tag === 'staging'
                       ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                      : activeProject.tag === 'demo'
-                      ? 'bg-supa-green/10 text-supa-green border border-supa-green/30 font-bold'
                       : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                   }`}
                 >
